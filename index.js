@@ -5,52 +5,59 @@ const crypto = require("node:crypto");
 var array = csv.toString().split("\r");
 
 const keys = array[0].split(",");
-keys[0] = "SeriesNumber";
+keys[1] = "SeriesNumber";
+keys[0] = "TeamNames";
+//console.log(keys);
 array.shift();
 
 for (var i = 0; i < array.length; ++i) {
   array[i] = array[i].replace(/(\n)/gm, "");
-  array[i].trim();
 }
 
-const teams = array.filter((i) => i.indexOf("TEAM") !== -1);
-const values = array.filter(
-  (i) => i.indexOf("TEAM") == -1 && i.indexOf(",,,,,,") == -1
-);
-const splitted = values.map((i) => {
-  const q = i.split(",");
-  for (let j = 0; j < q.length; j++) {
-    if (q[j].startsWith('"')) {
-      q[j] = q[j] + "," + q[j + 1];
-      q.splice(j + 1, 1);
-    }
-    if (q[j].startsWith(" ")) {
-      q[j - 1] = q[j - 1] + "," + q[j];
-      q.splice(j, 1);
-      j--;
-    }
-  }
-  return q;
-});
-const commasRemoved = teams.map((i) => i.replaceAll(",", ""));
+const teamUnsorted = array.filter((i) => i.indexOf("TEAM") !== -1);
+const teams = [];
+for (let i = 0; i < teamUnsorted.length; i++) {
+  const teamsArr = teamUnsorted[i].split(",");
+  teams.push(teamsArr[0]);
+}
+//console.log(array);
 const mintingTool = [];
 
-for (let i = 0, k = 1; i < commasRemoved.length; k++) {
-  mintingTool.push(commasRemoved[i]);
+for (let i = 0, k = 1; i < teams.length; k++) {
+  mintingTool.push(teams[i]);
   if (k % 20 === 0) {
     i++;
   }
 }
+for (let j = 0; j < array.length; j++) {
+  array[j] = array[j].split(",");
+  array[j][0] = mintingTool[j];
+}
+
 const arrayOfObjects = [];
-for (let index = 0; index < splitted.length; index++) {
+for (let index = 0; index < array.length; index++) {
   const objects = {};
-  keys.forEach((key, i) => (objects[key] = splitted[index][i]));
+  keys.forEach((key, i) => (objects[key] = array[index][i]));
   arrayOfObjects.push(objects);
 }
 
-//console.log(arrayOfObjects);
-const nfts = [];
+const dir = "./nfts";
+
+if (!fs.existsSync(dir)){
+  fs.mkdir(dir, (err) => {
+    if (err) {
+      throw err;
+    }
+    console.log("Directory is created.");
+  });
+}
+
 for (let index = 0; index < arrayOfObjects.length; index++) {
+  const attributes = arrayOfObjects[index].attributes.split(";");
+  for (let q = 0; q < attributes.length; q++) {
+    attributes[q] = attributes[q].trim().split(":");
+  }
+  const attributesObject = Object.fromEntries(attributes);
   jsonObject = {
     format: "CHIP-0007",
     name: arrayOfObjects[index].Name,
@@ -59,7 +66,17 @@ for (let index = 0; index < arrayOfObjects.length; index++) {
     sensitive_content: false,
     series_number: arrayOfObjects[index].SeriesNumber,
     series_total: 420,
-
+    attributes: [
+      { trait_type: "gender", value: arrayOfObjects[index].Gender },
+      { trait_type: "Hair", value: attributesObject.hair },
+      { trait_type: "Eyes", value: attributesObject.eyes },
+      { trait_type: "Teeth", value: attributesObject.teeth },
+      { trait_type: "Clothing", value: attributesObject.clothings },
+      { trait_type: "Accessories", value: attributesObject.accessories },
+      { trait_type: "Expression", value: attributesObject.expression },
+      { trait_type: "Strength", value: attributesObject.strength },
+      { trait_type: "Weakness", value: attributesObject.weakness },
+    ],
     collection: {
       name: "Zuri NFT Tickets for Free Lunch",
       id: "b774f676-c1d5-422e-beed-00ef5510c64d",
@@ -70,14 +87,11 @@ for (let index = 0; index < arrayOfObjects.length; index++) {
         },
       ],
     },
-    gender: arrayOfObjects[index].Gender,
-    uuid: arrayOfObjects[index].UUID,
   };
   const stringified = JSON.stringify(jsonObject);
   const hash = crypto.createHash("sha256").update(stringified).digest("hex");
   jsonObject["hash"] = hash;
   arrayOfObjects[index]["Hash"] = hash;
-  nfts.push(jsonObject);
   const jsonContent = JSON.stringify(jsonObject);
   fs.writeFile(
     `./nfts/${arrayOfObjects[index].Filename}.json`,
@@ -88,22 +102,20 @@ for (let index = 0; index < arrayOfObjects.length; index++) {
         console.log("An error occured while writing JSON Object to File.");
         return console.log(err);
       }
-
-      console.log(index);
     }
   );
 }
-
 const csvHeaders = Object.keys(arrayOfObjects[0]);
 const csvString = [
   csvHeaders,
   ...arrayOfObjects.map((values) => [
+    values.TeamNames,
     values.SeriesNumber,
     values.Filename,
     values.Name,
     values.Description,
     values.Gender,
-    values.Attributes,
+    values.attributes,
     values.UUID,
     values.Hash,
   ]),
